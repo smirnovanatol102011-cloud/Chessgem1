@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Шахматы</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;padding:12px;background:#161512;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;user-select:none;overflow:hidden}
+.top{width:100%;max-width:360px;background:#262421;padding:12px 16px;border-radius:10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:16px}
+#board{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:92vw;height:92vw;max-width:360px;max-height:360px;border:5px solid #262421;border-radius:8px;overflow:hidden}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;font-size:min(9.5vw,38px);cursor:pointer}
+.l{background:#f0d9b5}
+.d{background:#b58863}
+.sel{background:#cdd26a!important}
+.lm{background:rgba(205,210,106,.6)!important}
+.chk{background:#e03c3c!important}
+.hint::after{content:'';width:28%;height:28%;background:rgba(20,85,30,.45);border-radius:50%;position:absolute}
+.cap::after{content:'';width:82%;height:82%;border:3px solid rgba(20,85,30,.5);border-radius:50%;position:absolute}
+.pw{color:#fff;text-shadow:0 0 2px #000,0 0 3px #000,0 2px 3px rgba(0,0,0,.6)}
+.pb{color:#181818;text-shadow:0 0 1px #fff,0 1px 2px rgba(255,255,255,.4)}
+.btns{width:100%;max-width:360px;display:flex;gap:10px;margin-top:14px}
+button{flex:1;padding:13px;font-size:15px;font-weight:700;border:none;border-radius:8px;cursor:pointer;color:#fff}
+button:active{transform:translateY(2px)}
+.b1{background:#3f3d39;box-shadow:0 4px 0 #262421}
+.b2{background:#629924;box-shadow:0 4px 0 #466e19}
+</style>
+</head>
+<body>
+<div class="top"><span id="st">Ваш ход (Белые)</span><span style="color:#9ca3af;font-size:13px">ИИ</span></div>
+<div id="board"></div>
+<div class="btns">
+<button class="b1" onclick="undo()">Назад</button>
+<button class="b2" onclick="init()">Новая игра</button>
+</div>
+<script>
+const GLYPH={P:'♙',R:'♖',N:'♘',B:'♗',Q:'♕',K:'♔',p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'};
+const VAL={P:100,N:320,B:330,R:500,Q:900,K:20000};
+let brd=[],turn='w',sel=null,leg=[],lm=null,over=false,hist=[];
+const bEl=document.getElementById('board'),sEl=document.getElementById('st');
+
+function init(){
+brd=[
+['r','n','b','q','k','b','n','r'],
+['p','p','p','p','p','p','p','p'],
+['','','','','','','',''],
+['','','','','','','',''],
+['','','','','','','',''],
+['','','','','','','',''],
+['P','P','P','P','P','P','P','P'],
+['R','N','B','Q','K','B','N','R']
+];
+turn='w';sel=null;leg=[];lm=null;over=false;hist=[];
+sEl.textContent='Ваш ход (Белые)';
+draw();
+}
+
+const isW=p=>p!==''&&p===p.toUpperCase();
+const same=(a,b)=>a!==''&&b!==''&&isW(a)===isW(b);
+const copyB=b=>b.map(r=>r.slice());
+
+function pseudo(b,r,c){
+const p=b[r][c];
+if(!p)return[];
+const m=[],w=isW(p),d=w?-1:1,t=p.toUpperCase();
+const push=(nr,nc)=>{if(nr>=0&&nr<8&&nc>=0&&nc<8&&!same(p,b[nr][nc]))m.push({r:nr,c:nc})};
+if(t==='P'){
+if(r+d>=0&&r+d<8&&b[r+d][c]===''){
+m.push({r:r+d,c:c});
+if((w&&r===6||!w&&r===1)&&b[r+2*d][c]==='')m.push({r:r+2*d,c:c});
+}
+if(r+d>=0&&r+d<8&&c-1>=0&&b[r+d][c-1]!==''&&!same(p,b[r+d][c-1]))m.push({r:r+d,c:c-1});
+if(r+d>=0&&r+d<8&&c+1<8&&b[r+d][c+1]!==''&&!same(p,b[r+d][c+1]))m.push({r:r+d,c:c+1});
+}else if(t==='N'){
+const j=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+for(let i=0;i<8;i++)push(r+j[i][0],c+j[i][1]);
+}else if(t==='K'){
+for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)if(dr||dc)push(r+dr,c+dc);
+}else{
+const dirs=[];
+if(t==='R'||t==='Q')dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+if(t==='B'||t==='Q')dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+for(let i=0;i<dirs.length;i++){
+let nr=r+dirs[i][0],nc=c+dirs[i][1];
+while(nr>=0&&nr<8&&nc>=0&&nc<8){
+if(b[nr][nc]==='')m.push({r:nr,c:nc});
+else{if(!same(p,b[nr][nc]))m.push({r:nr,c:nc});break;}
+nr+=dirs[i][0];nc+=dirs[i][1];
+}
+}
+}
+return m;
+}
+
+function inCheck(b,wt){
+const k=wt?'K':'k';
+let kr=-1,kc=-1;
+for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(b[r][c]===k){kr=r;kc=c;}
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+if(b[r][c]!==''&&isW(b[r][c])!==wt){
+const ms=pseudo(b,r,c);
+for(let i=0;i<ms.length;i++)if(ms[i].r===kr&&ms[i].c===kc)return true;
+}
+}
+return false;
+}
+
+function step(b,fr,fc,tr,tc){
+const nb=copyB(b);
+let p=nb[fr][fc];
+if(p==='P'&&tr===0)p='Q';
+if(p==='p'&&tr===7)p='q';
+nb[tr][tc]=p;
+nb[fr][fc]='';
+return nb;
+}
+
+function legalMoves(b,r,c){
+const p=b[r][c];
+if(!p)return[];
+const w=isW(p),ps=pseudo(b,r,c),ok=[];
+for(let i=0;i<ps.length;i++){
+const nb=step(b,r,c,ps[i].r,ps[i].c);
+if(!inCheck(nb,w))ok.push(ps[i]);
+}
+return ok;
+}
+
+function allMoves(b,wt){
+const res=[];
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+if(b[r][c]!==''&&isW(b[r][c])===wt){
+const ms=legalMoves(b,r,c);
+for(let i=0;i<ms.length;i++)res.push({fr:r,fc:c,tr:ms[i].r,tc:ms[i].c});
+}
+}
+return res;
+}
+
+function clickSq(r,c){
+if(over||turn!=='w')return;
+let found=null;
+for(let i=0;i<leg.length;i++)if(leg[i].r===r&&leg[i].c===c)found=leg[i];
+if(found&&sel){
+hist.push({b:copyB(brd),lm:lm});
+brd=step(brd,sel.r,sel.c,r,c);
+lm={fr:sel.r,fc:sel.c,tr:r,tc:c};
+sel=null;leg=[];turn='b';
+draw();
+const bm=allMoves(brd,false);
+if(!bm.length){
+over=true;
+sEl.textContent=inCheck(brd,false)?'Мат! Вы победили!':'Пат! Ничья.';
+draw();
+return;
+}
+sEl.textContent=inCheck(brd,false)?'Шах! Думает ИИ...':'Ход компьютера...';
+setTimeout(bot,220);
+return;
+}
+if(brd[r][c]!==''&&isW(brd[r][c])){
+sel={r:r,c:c};
+leg=legalMoves(brd,r,c);
+}else{
+sel=null;leg=[];
+}
+draw();
+}
+
+function undo(){
+if(turn!=='w'||!hist.length)return;
+const prev=hist.pop();
+brd=prev.b;lm=prev.lm;sel=null;leg=[];over=false;
+sEl.textContent='Ваш ход (Белые)';
+draw();
+}
+
+function evalB(b){
+let sc=0;
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+const p=b[r][c];
+if(!p)continue;
+let v=VAL[p.toUpperCase()];
+const ctr=(3.5-Math.abs(3.5-r))+(3.5-Math.abs(3.5-c));
+if(p.toUpperCase()==='P'||p.toUpperCase()==='N')v+=ctr*4;
+sc+=isW(p)?-v:v;
+}
+return sc;
+}
+
+function bot(){
+const ms=allMoves(brd,false);
+if(!ms.length)return;
+let best=-999999,pool=[];
+for(let i=0;i<ms.length;i++){
+const m=ms[i];
+const b1=step(brd,m.fr,m.fc,m.tr,m.tc);
+const reps=allMoves(b1,true);
+let worst=999999;
+if(!reps.length){
+worst=inCheck(b1,true)?100000:0;
+}else{
+for(let j=0;j<reps.length;j++){
+const b2=step(b1,reps[j].fr,reps[j].fc,reps[j].tr,reps[j].tc);
+const ev=evalB(b2);
+if(ev<worst)worst=ev;
+}
+}
+if(worst>best){best=worst;pool=[m];}
+else if(worst===best)pool.push(m);
+}
+const ch=pool[Math.floor(Math.random()*pool.length)];
+brd=step(brd,ch.fr,ch.fc,ch.tr,ch.tc);
+lm={fr:ch.fr,fc:ch.fc,tr:ch.tr,tc:ch.tc};
+turn='w';
+const pm=allMoves(brd,true);
+if(!pm.length){
+over=true;
+sEl.textContent=inCheck(brd,true)?'Мат! Победил ИИ.':'Пат! Ничья.';
+}else{
+sEl.textContent=inCheck(brd,true)?'Вам шах! Ваш ход':'Ваш ход (Белые)';
+}
+draw();
+}
+
+function draw(){
+bEl.innerHTML='';
+const wc=inCheck(brd,true),bc=inCheck(brd,false);
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+const sq=document.createElement('div');
+sq.className='sq '+((r+c)%2===0?'l':'d');
+if(lm&&((lm.fr===r&&lm.fc===c)||(lm.tr===r&&lm.tc===c)))sq.classList.add('lm');
+if(sel&&sel.r===r&&sel.c===c)sq.classList.add('sel');
+if((wc&&brd[r][c]==='K')||(bc&&brd[r][c]==='k'))sq.classList.add('chk');
+for(let i=0;i<leg.length;i++)if(leg[i].r===r&&leg[i].c===c)sq.classList.add(brd[r][c]?'cap':'hint');
+if(brd[r][c]){
+sq.textContent=GLYPH[brd[r][c]];
+sq.classList.add(isW(brd[r][c])?'pw':'pb');
+}
+sq.onclick=()=>clickSq(r,c);
+bEl.appendChild(sq);
+}
+}
+
+init();
+</script>
+</body>
+  </html>
+  
